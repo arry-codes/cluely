@@ -73,17 +73,19 @@ function App() {
   };
 
   const handleMicClick = () => {
+    console.log("Mic button clicked! State:", { isListening, hasTranscript: transcriptRef.current?.length > 0 });
+
     if (isListening) {
-      // User clicked STOP
+      console.log("Stopping listening...");
       stopListening();
 
-      // Use transcript from ref to ensure we have latest content
       const currentText = transcriptRef.current;
       if (currentText && currentText.trim().length > 0) {
+        console.log("Generating answer for:", currentText);
         handleGenerateAnswer(currentText);
       }
     } else {
-      // User clicked START
+      console.log("Starting listening...");
       resetTranscript();
       setAnswer('');
       startListening();
@@ -151,7 +153,7 @@ function App() {
           <div className="col-span-2">
             <AudioVisualizer isListening={isListening} />
           </div>
-          <div className="glass-panel p-8 flex flex-col items-center justify-center gap-4">
+          <div className="glass-panel p-8 flex flex-col items-center justify-center gap-4 relative z-10">
             <MicButton
               size="large"
               isListening={isListening}
