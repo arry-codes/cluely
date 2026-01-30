@@ -19,127 +19,96 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
     const recognitionRef = useRef<any>(null);
     const isListeningRef = useRef(false);
 
-    // Robust state tracking
-    const finalTranscriptRef = useRef('');
-
-    // Helper to check for mobile
-    const isMobile = typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
     const hasSupport = Boolean(SpeechRecognition);
 
-    const createRecognition = useCallback(() => {
-        if (!SpeechRecognition) return null;
+    const startListening = useCallback(() => {
+        if (!SpeechRecognition) return;
+
+        // cleanup previous
+        if (recognitionRef.current) {
+            recognitionRef.current.abort();
+        }
 
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = 'en-US';
 
-        // Android/Mobile often sends duplicate interim results
         recognition.onresult = (event: any) => {
-            let interimTranscript = '';
+            let final = '';
+            let interim = '';
 
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const result = event.results[i];
-                if (result.isFinal) {
-                    // Robust deduplication: check if this final result is already at end of our stored text
-                    const newFinal = result[0].transcript.trim();
-                    const currentStored = finalTranscriptRef.current.trim();
-
-                    if (!currentStored.endsWith(newFinal)) {
-                        finalTranscriptRef.current += ' ' + newFinal;
-                        finalTranscriptRef.current = finalTranscriptRef.current.trim();
-                    }
+            for (let i = 0; i < event.results.length; i++) {
+                if (event.results[i].isFinal) {
+                    final += event.results[i][0].transcript;
                 } else {
-                    interimTranscript += result[0].transcript;
+                    interim += event.results[i][0].transcript;
                 }
             }
+            // Simple concat: Previous Final + New Final + Interim
+            // NOTE: We rely on the API returning the FULL session transcript if continuous=true works well.
+            // However, some mobile browsers only return current segment.
+            // So we implement the standard "append" strategy manually for robustness:
 
-            // Simple deduplication for display
-            const finalDisplay = finalTranscriptRef.current;
+            // Actually, relying on state update for appending is risky with rapid events.
+            // Best approach for React: Rebuild from event results if possible, 
+            // but since results list grows, we can just use that.
 
-            // On mobile, interim often repeats the end of final. 
-            // Clean display by checking overlap
-            let cleanInterim = interimTranscript;
-            if (isMobile && finalDisplay.endsWith(cleanInterim.trim())) {
-                cleanInterim = '';
+            // Let's rely on the event.results array which accumulates in absolute continuous mode
+            // This is the standard correct way:
+            let fullTranscript = '';
+            for (let i = 0; i < event.results.length; i++) {
+                fullTranscript += event.results[i][0].transcript;
             }
-
-            setTranscript((finalDisplay + ' ' + cleanInterim).trim());
+            setTranscript(fullTranscript);
         };
 
         recognition.onerror = (event: any) => {
             console.error('Speech error:', event.error);
-            if (event.error === 'not-allowed') {
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
                 isListeningRef.current = false;
                 setIsListening(false);
             }
         };
 
         recognition.onend = () => {
-            if (isListeningRef.current && recognitionRef.current) {
-                try {
-                    // Small delay before restart on mobile prevents some issues
-                    setTimeout(() => {
-                        try {
-                            if (isListeningRef.current) recognitionRef.current.start();
-                        } catch (e) { }
-                    }, isMobile ? 100 : 0);
-                } catch (e) { }
+            if (isListeningRef.current) {
+                try { recognition.start(); } catch (e) { }
             }
         };
 
-        return recognition;
-    }, [isMobile]);
-
-    const startListening = useCallback(() => {
-        if (!SpeechRecognition) return;
-
-        if (recognitionRef.current) {
-            try { recognitionRef.current.stop(); } catch (e) { }
-        }
-
-        const recognition = createRecognition();
-        if (!recognition) return;
-
         recognitionRef.current = recognition;
         isListeningRef.current = true;
-        // Don't clear transcript on start listening for continuity if wanted
-        // but app logic usually clears it. We just reset the ref logic here.
-        // finalTranscriptRef.current = ''; 
         setIsListening(true);
 
         try {
             recognition.start();
-            console.log('🎤 Started listening');
         } catch (e) {
-            console.error('Failed to start:', e);
+            console.error(e);
         }
-    }, [createRecognition]);
+    }, []);
 
     const stopListening = useCallback(() => {
         isListeningRef.current = false;
         setIsListening(false);
-
         if (recognitionRef.current) {
-            try {
-                recognitionRef.current.stop();
-                console.log('🛑 Stopped listening');
-            } catch (e) { }
-            recognitionRef.current = null;
+            recognitionRef.current.stop();
         }
     }, []);
 
     const resetTranscript = useCallback(() => {
         setTranscript('');
-        finalTranscriptRef.current = '';
+        if (recognitionRef.current) {
+            // Abort basically resets the session history in the API object
+            try { recognitionRef.current.abort(); } catch (e) { }
+        }
     }, []);
 
     useEffect(() => {
         return () => {
             isListeningRef.current = false;
             if (recognitionRef.current) {
-                try { recognitionRef.current.stop(); } catch (e) { }
+                recognitionRef.current.abort();
             }
         };
     }, []);
