@@ -18,7 +18,12 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef<any>(null);
     const isListeningRef = useRef(false);
+
+    // Robust state tracking
     const finalTranscriptRef = useRef('');
+
+    // Helper to check for mobile
+    const isMobile = typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
     const hasSupport = Boolean(SpeechRecognition);
 
@@ -30,23 +35,37 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
         recognition.interimResults = true;
         recognition.lang = 'en-US';
 
+        // Android/Mobile often sends duplicate interim results
         recognition.onresult = (event: any) => {
             let interimTranscript = '';
 
-            // Only process new results from resultIndex onwards
             for (let i = event.resultIndex; i < event.results.length; i++) {
                 const result = event.results[i];
                 if (result.isFinal) {
-                    // Add final result to our stored final transcript
-                    finalTranscriptRef.current += result[0].transcript + ' ';
+                    // Robust deduplication: check if this final result is already at end of our stored text
+                    const newFinal = result[0].transcript.trim();
+                    const currentStored = finalTranscriptRef.current.trim();
+
+                    if (!currentStored.endsWith(newFinal)) {
+                        finalTranscriptRef.current += ' ' + newFinal;
+                        finalTranscriptRef.current = finalTranscriptRef.current.trim();
+                    }
                 } else {
-                    // Accumulate interim results
                     interimTranscript += result[0].transcript;
                 }
             }
 
-            // Combine stored final transcript with current interim
-            setTranscript(finalTranscriptRef.current + interimTranscript);
+            // Simple deduplication for display
+            const finalDisplay = finalTranscriptRef.current;
+
+            // On mobile, interim often repeats the end of final. 
+            // Clean display by checking overlap
+            let cleanInterim = interimTranscript;
+            if (isMobile && finalDisplay.endsWith(cleanInterim.trim())) {
+                cleanInterim = '';
+            }
+
+            setTranscript((finalDisplay + ' ' + cleanInterim).trim());
         };
 
         recognition.onerror = (event: any) => {
@@ -58,27 +77,26 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
         };
 
         recognition.onend = () => {
-            // Auto-restart if still supposed to be listening
             if (isListeningRef.current && recognitionRef.current) {
                 try {
-                    recognitionRef.current.start();
-                } catch (e) {
-                    // Already started, ignore
-                }
+                    // Small delay before restart on mobile prevents some issues
+                    setTimeout(() => {
+                        try {
+                            if (isListeningRef.current) recognitionRef.current.start();
+                        } catch (e) { }
+                    }, isMobile ? 100 : 0);
+                } catch (e) { }
             }
         };
 
         return recognition;
-    }, []);
+    }, [isMobile]);
 
     const startListening = useCallback(() => {
         if (!SpeechRecognition) return;
 
-        // Create fresh recognition instance
         if (recognitionRef.current) {
-            try {
-                recognitionRef.current.stop();
-            } catch (e) { }
+            try { recognitionRef.current.stop(); } catch (e) { }
         }
 
         const recognition = createRecognition();
@@ -86,7 +104,9 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
 
         recognitionRef.current = recognition;
         isListeningRef.current = true;
-        finalTranscriptRef.current = ''; // Reset final transcript
+        // Don't clear transcript on start listening for continuity if wanted
+        // but app logic usually clears it. We just reset the ref logic here.
+        // finalTranscriptRef.current = ''; 
         setIsListening(true);
 
         try {
@@ -115,14 +135,11 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
         finalTranscriptRef.current = '';
     }, []);
 
-    // Cleanup on unmount
     useEffect(() => {
         return () => {
             isListeningRef.current = false;
             if (recognitionRef.current) {
-                try {
-                    recognitionRef.current.stop();
-                } catch (e) { }
+                try { recognitionRef.current.stop(); } catch (e) { }
             }
         };
     }, []);
