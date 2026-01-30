@@ -13,54 +13,53 @@ const SpeechRecognition = typeof window !== 'undefined'
     ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     : null;
 
+// Detect mobile
+const isMobile = typeof window !== 'undefined' &&
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
 export const useSpeechRecognition = (): SpeechRecognitionResult => {
     const [transcript, setTranscript] = useState('');
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef<any>(null);
     const isListeningRef = useRef(false);
 
+    // For mobile: track last processed result index
+    const lastResultIndexRef = useRef(0);
+    const accumulatedTextRef = useRef('');
+
     const hasSupport = Boolean(SpeechRecognition);
 
     const startListening = useCallback(() => {
         if (!SpeechRecognition) return;
 
-        // cleanup previous
         if (recognitionRef.current) {
-            recognitionRef.current.abort();
+            try { recognitionRef.current.abort(); } catch (e) { }
         }
 
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
-        recognition.interimResults = true;
+        recognition.interimResults = !isMobile; // Disable interim on mobile to reduce confusion
         recognition.lang = 'en-US';
 
         recognition.onresult = (event: any) => {
-            let final = '';
-            let interim = '';
-
-            for (let i = 0; i < event.results.length; i++) {
-                if (event.results[i].isFinal) {
-                    final += event.results[i][0].transcript;
-                } else {
-                    interim += event.results[i][0].transcript;
+            if (isMobile) {
+                // MOBILE: Only process final results, append new ones only
+                for (let i = lastResultIndexRef.current; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        const newText = event.results[i][0].transcript;
+                        accumulatedTextRef.current += newText + ' ';
+                        lastResultIndexRef.current = i + 1;
+                    }
                 }
+                setTranscript(accumulatedTextRef.current.trim());
+            } else {
+                // DESKTOP: Standard approach - read all results
+                let fullTranscript = '';
+                for (let i = 0; i < event.results.length; i++) {
+                    fullTranscript += event.results[i][0].transcript;
+                }
+                setTranscript(fullTranscript);
             }
-            // Simple concat: Previous Final + New Final + Interim
-            // NOTE: We rely on the API returning the FULL session transcript if continuous=true works well.
-            // However, some mobile browsers only return current segment.
-            // So we implement the standard "append" strategy manually for robustness:
-
-            // Actually, relying on state update for appending is risky with rapid events.
-            // Best approach for React: Rebuild from event results if possible, 
-            // but since results list grows, we can just use that.
-
-            // Let's rely on the event.results array which accumulates in absolute continuous mode
-            // This is the standard correct way:
-            let fullTranscript = '';
-            for (let i = 0; i < event.results.length; i++) {
-                fullTranscript += event.results[i][0].transcript;
-            }
-            setTranscript(fullTranscript);
         };
 
         recognition.onerror = (event: any) => {
@@ -79,10 +78,13 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
 
         recognitionRef.current = recognition;
         isListeningRef.current = true;
+        lastResultIndexRef.current = 0;
+        accumulatedTextRef.current = '';
         setIsListening(true);
 
         try {
             recognition.start();
+            console.log('🎤 Started listening (mobile:', isMobile, ')');
         } catch (e) {
             console.error(e);
         }
@@ -92,14 +94,15 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
         isListeningRef.current = false;
         setIsListening(false);
         if (recognitionRef.current) {
-            recognitionRef.current.stop();
+            try { recognitionRef.current.stop(); } catch (e) { }
         }
     }, []);
 
     const resetTranscript = useCallback(() => {
         setTranscript('');
+        accumulatedTextRef.current = '';
+        lastResultIndexRef.current = 0;
         if (recognitionRef.current) {
-            // Abort basically resets the session history in the API object
             try { recognitionRef.current.abort(); } catch (e) { }
         }
     }, []);
@@ -108,7 +111,7 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
         return () => {
             isListeningRef.current = false;
             if (recognitionRef.current) {
-                recognitionRef.current.abort();
+                try { recognitionRef.current.abort(); } catch (e) { }
             }
         };
     }, []);
