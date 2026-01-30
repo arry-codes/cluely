@@ -18,6 +18,7 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef<any>(null);
     const isListeningRef = useRef(false);
+    const finalTranscriptRef = useRef('');
 
     const hasSupport = Boolean(SpeechRecognition);
 
@@ -30,25 +31,26 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
         recognition.lang = 'en-US';
 
         recognition.onresult = (event: any) => {
-            let finalText = '';
-            let interimText = '';
+            let interimTranscript = '';
 
-            for (let i = 0; i < event.results.length; i++) {
+            // Only process new results from resultIndex onwards
+            for (let i = event.resultIndex; i < event.results.length; i++) {
                 const result = event.results[i];
                 if (result.isFinal) {
-                    finalText += result[0].transcript + ' ';
+                    // Add final result to our stored final transcript
+                    finalTranscriptRef.current += result[0].transcript + ' ';
                 } else {
-                    interimText += result[0].transcript;
+                    // Accumulate interim results
+                    interimTranscript += result[0].transcript;
                 }
             }
 
-            // Update with both final and interim for real-time feel
-            setTranscript(finalText + interimText);
+            // Combine stored final transcript with current interim
+            setTranscript(finalTranscriptRef.current + interimTranscript);
         };
 
         recognition.onerror = (event: any) => {
             console.error('Speech error:', event.error);
-            // Don't stop on no-speech or aborted errors
             if (event.error === 'not-allowed') {
                 isListeningRef.current = false;
                 setIsListening(false);
@@ -84,6 +86,7 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
 
         recognitionRef.current = recognition;
         isListeningRef.current = true;
+        finalTranscriptRef.current = ''; // Reset final transcript
         setIsListening(true);
 
         try {
@@ -109,6 +112,7 @@ export const useSpeechRecognition = (): SpeechRecognitionResult => {
 
     const resetTranscript = useCallback(() => {
         setTranscript('');
+        finalTranscriptRef.current = '';
     }, []);
 
     // Cleanup on unmount
