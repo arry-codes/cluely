@@ -71,18 +71,18 @@ function App() {
   // Mic Button Component (shared between mobile & desktop)
   const MicButton = ({ size = 'large' }: { size?: 'large' | 'medium' }) => {
     const isLarge = size === 'large';
-    const buttonSize = isLarge ? 'w-28 h-28' : 'w-20 h-20';
-    const iconSize = isLarge ? 40 : 28;
+    const buttonSize = isLarge ? 'w-20 h-20' : 'w-16 h-16';
+    const iconSize = isLarge ? 32 : 24;
 
     return (
       <button
         onClick={handleMicClick}
         disabled={isGenerating}
         className={`${buttonSize} rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 disabled:opacity-50 ${isGenerating
-            ? 'bg-gray-600 cursor-wait'
-            : isListening
-              ? 'bg-red-500 shadow-red-500/50 animate-pulse'
-              : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/40 hover:scale-105'
+          ? 'bg-gray-600 cursor-wait'
+          : isListening
+            ? 'bg-red-500 shadow-red-500/50 animate-pulse'
+            : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/40 hover:scale-105'
           }`}
       >
         {isGenerating ? (
@@ -102,10 +102,10 @@ function App() {
       <div className="md:hidden flex flex-col gap-5 w-full pb-36">
         {/* Status */}
         <div className={`text-center py-4 px-4 rounded-xl font-medium text-sm transition-all ${isGenerating
-            ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
-            : isListening
-              ? 'bg-red-500/10 text-red-400 border border-red-500/30'
-              : 'bg-white/5 text-gray-500 border border-white/10'
+          ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
+          : isListening
+            ? 'bg-red-500/10 text-red-400 border border-red-500/30'
+            : 'bg-white/5 text-gray-500 border border-white/10'
           }`}>
           {isGenerating
             ? '✨ Generating answer...'
@@ -136,10 +136,10 @@ function App() {
           <div className="glass-panel p-8 flex flex-col items-center justify-center gap-4">
             <MicButton size="large" />
             <p className={`text-center text-sm font-medium transition-colors ${isGenerating
-                ? 'text-purple-400'
-                : isListening
-                  ? 'text-red-400'
-                  : 'text-gray-500'
+              ? 'text-purple-400'
+              : isListening
+                ? 'text-red-400'
+                : 'text-gray-500'
               }`}>
               {isGenerating
                 ? 'Generating...'
