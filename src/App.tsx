@@ -7,17 +7,55 @@ import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { generateAnswer } from './services/gemini';
 import { Mic, MicOff, Loader2 } from 'lucide-react';
 
+// Mic Button Component (Shared)
+const MicButton = ({
+  size = 'large',
+  isListening,
+  isGenerating,
+  onClick
+}: {
+  size?: 'large' | 'medium',
+  isListening: boolean,
+  isGenerating: boolean,
+  onClick: () => void
+}) => {
+  const isLarge = size === 'large';
+  const buttonSize = isLarge ? 'w-20 h-20' : 'w-16 h-16';
+  const iconSize = isLarge ? 32 : 24;
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={isGenerating}
+      className={`${buttonSize} rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 disabled:opacity-50 ${isGenerating
+        ? 'bg-gray-600 cursor-wait'
+        : isListening
+          ? 'bg-red-500 shadow-red-500/50 animate-pulse'
+          : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/40 hover:scale-105'
+        }`}
+    >
+      {isGenerating ? (
+        <Loader2 size={iconSize} className="text-white animate-spin" />
+      ) : isListening ? (
+        <MicOff size={iconSize} className="text-white" />
+      ) : (
+        <Mic size={iconSize} className="text-white" />
+      )}
+    </button>
+  );
+};
+
 function App() {
   const { isListening, transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition();
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
   const [answer, setAnswer] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const hasTranscriptRef = useRef(false);
+  const transcriptRef = useRef(transcript);
 
-  // Track if we have transcript content
+  // Keep ref in sync for event handlers
   useEffect(() => {
-    hasTranscriptRef.current = transcript.trim().length > 0;
+    transcriptRef.current = transcript;
   }, [transcript]);
 
   const handleGenerateAnswer = async (text: string) => {
@@ -36,13 +74,16 @@ function App() {
 
   const handleMicClick = () => {
     if (isListening) {
-      // Stop listening and generate response
+      // User clicked STOP
       stopListening();
-      if (hasTranscriptRef.current) {
-        handleGenerateAnswer(transcript);
+
+      // Use transcript from ref to ensure we have latest content
+      const currentText = transcriptRef.current;
+      if (currentText && currentText.trim().length > 0) {
+        handleGenerateAnswer(currentText);
       }
     } else {
-      // Clear previous and start fresh
+      // User clicked START
       resetTranscript();
       setAnswer('');
       startListening();
@@ -67,34 +108,6 @@ function App() {
       </div>
     );
   }
-
-  // Mic Button Component (shared between mobile & desktop)
-  const MicButton = ({ size = 'large' }: { size?: 'large' | 'medium' }) => {
-    const isLarge = size === 'large';
-    const buttonSize = isLarge ? 'w-20 h-20' : 'w-16 h-16';
-    const iconSize = isLarge ? 32 : 24;
-
-    return (
-      <button
-        onClick={handleMicClick}
-        disabled={isGenerating}
-        className={`${buttonSize} rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 disabled:opacity-50 ${isGenerating
-          ? 'bg-gray-600 cursor-wait'
-          : isListening
-            ? 'bg-red-500 shadow-red-500/50 animate-pulse'
-            : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/40 hover:scale-105'
-          }`}
-      >
-        {isGenerating ? (
-          <Loader2 size={iconSize} className="text-white animate-spin" />
-        ) : isListening ? (
-          <MicOff size={iconSize} className="text-white" />
-        ) : (
-          <Mic size={iconSize} className="text-white" />
-        )}
-      </button>
-    );
-  };
 
   return (
     <Layout>
@@ -122,7 +135,12 @@ function App() {
 
         {/* Floating Mic Button */}
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-          <MicButton size="large" />
+          <MicButton
+            size="large"
+            isListening={isListening}
+            isGenerating={isGenerating}
+            onClick={handleMicClick}
+          />
         </div>
       </div>
 
@@ -134,7 +152,12 @@ function App() {
             <AudioVisualizer isListening={isListening} />
           </div>
           <div className="glass-panel p-8 flex flex-col items-center justify-center gap-4">
-            <MicButton size="large" />
+            <MicButton
+              size="large"
+              isListening={isListening}
+              isGenerating={isGenerating}
+              onClick={handleMicClick}
+            />
             <p className={`text-center text-sm font-medium transition-colors ${isGenerating
               ? 'text-purple-400'
               : isListening
